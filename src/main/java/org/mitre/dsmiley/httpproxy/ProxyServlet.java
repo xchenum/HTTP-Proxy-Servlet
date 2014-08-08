@@ -100,7 +100,7 @@ public class ProxyServlet extends HttpServlet {
     /**
      * An integer parameter name to enable page refresh
      */
-    public static final String P_REFRESHINTERVAL = "refreshInteval";
+    public static final String P_REFRESHINTERVAL = "refreshInterval";
 
     /**
      * The parameter name for the target (destination) URI to proxy to.
@@ -306,16 +306,25 @@ public class ProxyServlet extends HttpServlet {
             //noinspection deprecation
             servletResponse.setStatus(statusCode, proxyResponse.getStatusLine().getReasonPhrase());
 
+            // Copy headers
+            copyResponseHeaders(proxyResponse, servletResponse);
+
             // Send the content to the client
             copyResponseEntity(proxyResponse, servletResponse, servletRequest);
 
-            // Reset the content-length is necessary
-            copyResponseHeaders(proxyResponse, servletResponse);
         } catch (ConnectException ce) {
             // backend connection refused
             // return something more reasonable
             servletResponse.setStatus(503);
             servletResponse.getOutputStream().println("Service Unavailable.");
+
+            // refresh seems reasonable to do in this case
+            if (refreshInterval > 0) {
+                servletResponse.setIntHeader("Refresh", refreshInterval);
+                if (doLog) {
+                    log("setting refresh header to " + refreshInterval);
+                }
+            }
         } catch (Exception e) {
             //abort request, according to best practice with HttpClient
             if (proxyRequest instanceof AbortableHttpRequest) {
@@ -466,6 +475,9 @@ public class ProxyServlet extends HttpServlet {
         }
         if (refreshInterval > 0) {
             servletResponse.setIntHeader("Refresh", refreshInterval);
+            if (doLog) {
+                log("setting refresh header to " + refreshInterval);
+            }
         }
     }
 

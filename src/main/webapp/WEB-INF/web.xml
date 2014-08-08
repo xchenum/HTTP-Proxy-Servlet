@@ -20,6 +20,10 @@
           <param-name>enableRewrite</param-name>
           <param-value>true</param-value>
         </init-param>
+        <init-param>
+          <param-name>refreshInterval</param-name>
+          <param-value>3</param-value>
+        </init-param>
     </servlet>
     <servlet-mapping>
       <servlet-name>http-proxy</servlet-name>
