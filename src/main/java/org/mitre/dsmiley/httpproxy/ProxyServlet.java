@@ -50,7 +50,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.PrintStream;
+import java.net.ConnectException;
 import java.lang.reflect.Constructor;
 import java.net.URI;
 import java.net.URL;
@@ -98,6 +98,11 @@ public class ProxyServlet extends HttpServlet {
     public static final String P_ENABLEREWRITE = "enableRewrite";
 
     /**
+     * An integer parameter name to enable page refresh
+     */
+    public static final String P_REFRESHINTERVAL = "refreshInteval";
+
+    /**
      * The parameter name for the target (destination) URI to proxy to.
      */
     protected static final String P_TARGET_URI = "targetUri";
@@ -111,6 +116,7 @@ public class ProxyServlet extends HttpServlet {
     protected boolean doLog = false;
     protected boolean doForwardIP = true;
     protected boolean doEnableRewrite = false;
+    protected int refreshInterval = 0;
 
     /**
      * User agents shouldn't send the url fragment but what if it does?
@@ -157,6 +163,11 @@ public class ProxyServlet extends HttpServlet {
         String doEnableRewriteString = getServletConfig().getInitParameter(P_ENABLEREWRITE);
         if (doEnableRewriteString != null) {
             this.doEnableRewrite = Boolean.parseBoolean(doEnableRewriteString);
+        }
+
+        String refreshIntervalString = getServletConfig().getInitParameter(P_REFRESHINTERVAL);
+        if (refreshIntervalString != null) {
+            this.refreshInterval = Integer.parseInt(refreshIntervalString);
         }
 
         initTarget();//sets target*
@@ -300,6 +311,11 @@ public class ProxyServlet extends HttpServlet {
 
             // Reset the content-length is necessary
             copyResponseHeaders(proxyResponse, servletResponse);
+        } catch (ConnectException ce) {
+            // backend connection refused
+            // return something more reasonable
+            servletResponse.setStatus(503);
+            servletResponse.getOutputStream().println("Service Unavailable.");
         } catch (Exception e) {
             //abort request, according to best practice with HttpClient
             if (proxyRequest instanceof AbortableHttpRequest) {
@@ -446,11 +462,10 @@ public class ProxyServlet extends HttpServlet {
         for (Header header : proxyResponse.getAllHeaders()) {
             if (hopByHopHeaders.containsHeader(header.getName()))
                 continue;
-            // ignore the content-header since body is rewritten
-            //if (header.getName().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)) {
-            	
-            //}
             servletResponse.addHeader(header.getName(), header.getValue());
+        }
+        if (refreshInterval > 0) {
+            servletResponse.setIntHeader("Refresh", refreshInterval);
         }
     }
 
@@ -521,6 +536,9 @@ public class ProxyServlet extends HttpServlet {
 
                     HttpEntity res = new StringEntity(doc.toString(), ContentType.TEXT_HTML);
                     res.writeTo(servletOutputStream);
+
+                    // make sure to reset content length after the rewrite
+                    servletResponse.setContentLength(doc.toString().length());
                 } else {
                     OutputStream servletOutputStream = servletResponse.getOutputStream();
                     new ByteArrayEntity(content).writeTo(servletOutputStream);
@@ -580,12 +598,16 @@ public class ProxyServlet extends HttpServlet {
                     // XXX assumes targetUri doesn't end with /
                     // XXX what if returned URL is shorter than targetUri
                     // do we need to handle relative paths
-                    return servletRequest.getContextPath() + url.substring(tUrl.getPath().length());
+                    return  servletRequest.getContextPath() +
+                            servletRequest.getServletPath() +
+                            url.substring(tUrl.getPath().length());
                 } else {
                     return url;
                 }
             } else if (url.startsWith(tUrlString)) {
-                return servletRequest.getContextPath() + url.substring(tUrlString.length());
+                return  servletRequest.getContextPath() +
+                        servletRequest.getServletPath() +
+                        url.substring(tUrlString.length());
             } else {
                 return url;
             }
