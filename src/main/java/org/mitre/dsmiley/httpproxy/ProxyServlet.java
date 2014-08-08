@@ -19,6 +19,7 @@ package org.mitre.dsmiley.httpproxy;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpEntityEnclosingRequest;
+import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.HttpHeaders;
@@ -45,6 +46,7 @@ import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -293,11 +295,11 @@ public class ProxyServlet extends HttpServlet {
             //noinspection deprecation
             servletResponse.setStatus(statusCode, proxyResponse.getStatusLine().getReasonPhrase());
 
-            copyResponseHeaders(proxyResponse, servletResponse);
-
             // Send the content to the client
             copyResponseEntity(proxyResponse, servletResponse, servletRequest);
 
+            // Reset the content-length is necessary
+            copyResponseHeaders(proxyResponse, servletResponse);
         } catch (Exception e) {
             //abort request, according to best practice with HttpClient
             if (proxyRequest instanceof AbortableHttpRequest) {
@@ -445,8 +447,9 @@ public class ProxyServlet extends HttpServlet {
             if (hopByHopHeaders.containsHeader(header.getName()))
                 continue;
             // ignore the content-header since body is rewritten
-            if (header.getName().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH))
-                continue;
+            //if (header.getName().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)) {
+            	
+            //}
             servletResponse.addHeader(header.getName(), header.getValue());
         }
     }
@@ -463,14 +466,14 @@ public class ProxyServlet extends HttpServlet {
     /**
      * Rewrite href attribute of an element
      */
-    protected void rewriteHref(Element element, HttpServletRequest servletRequest) {
-        String linkHref = element.attr("href");
+    protected void rewrite(Element element, String attr, HttpServletRequest servletRequest) {
+        String linkHref = element.attr(attr);
         if (linkHref == null)
             return;
 
         String newLinkHref = rewriteUrl(linkHref, servletRequest);
         if (!linkHref.equals(newLinkHref)) {
-            element.attr("href", newLinkHref);
+            element.attr(attr, newLinkHref);
             if (doLog) {
                 log("found link " + linkHref + ", rewrite to " + newLinkHref);
             }
@@ -491,18 +494,27 @@ public class ProxyServlet extends HttpServlet {
                 OutputStream servletOutputStream = servletResponse.getOutputStream();
                 entity.writeTo(servletOutputStream);
             } else {
-                String responseString = EntityUtils.toString(entity, "UTF-8");
+            	byte[] content = EntityUtils.toByteArray(entity);
+                String responseString = new String(content, "UTF-8");
                 if (responseString.contains("<html>")) {
                     // a quick hack to make sure we only rewrite html pages
                     // and skip css, etc.
                     Document doc = Jsoup.parse(responseString);
 
                     for (Element link : doc.select("a")) {
-                        rewriteHref(link, servletRequest);
+                        rewrite(link, "href", servletRequest);
                     }
 
                     for (Element link : doc.select("link")) {
-                        rewriteHref(link, servletRequest);
+                        rewrite(link, "href", servletRequest);
+                    }
+                    
+                    for (Element img: doc.select("img")) {
+                    	rewrite(img, "src", servletRequest);
+                    }
+                    
+                    for (Element script: doc.select("script")) {
+                    	rewrite(script, "src", servletRequest);
                     }
 
                     OutputStream servletOutputStream = servletResponse.getOutputStream();
@@ -511,7 +523,7 @@ public class ProxyServlet extends HttpServlet {
                     res.writeTo(servletOutputStream);
                 } else {
                     OutputStream servletOutputStream = servletResponse.getOutputStream();
-                    entity.writeTo(servletOutputStream);
+                    new ByteArrayEntity(content).writeTo(servletOutputStream);
                 }
             }
         }
@@ -568,12 +580,12 @@ public class ProxyServlet extends HttpServlet {
                     // XXX assumes targetUri doesn't end with /
                     // XXX what if returned URL is shorter than targetUri
                     // do we need to handle relative paths
-                    return servletRequest.getServletPath() + url.substring(tUrl.getPath().length());
+                    return servletRequest.getContextPath() + url.substring(tUrl.getPath().length());
                 } else {
                     return url;
                 }
             } else if (url.startsWith(tUrlString)) {
-                return servletRequest.getServletPath() + url.substring(tUrlString.length());
+                return servletRequest.getContextPath() + url.substring(tUrlString.length());
             } else {
                 return url;
             }
