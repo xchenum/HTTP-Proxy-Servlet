@@ -471,12 +471,28 @@ public class ProxyServlet extends HttpServlet {
         for (Header header : proxyResponse.getAllHeaders()) {
             if (hopByHopHeaders.containsHeader(header.getName()))
                 continue;
+            // do not copy content-length for now
+            if (header.getName().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)) {
+                continue;
+            }
             servletResponse.addHeader(header.getName(), header.getValue());
         }
         if (refreshInterval > 0) {
             servletResponse.setIntHeader("Refresh", refreshInterval);
             if (doLog) {
                 log("setting refresh header to " + refreshInterval);
+            }
+        }
+    }
+
+    /**
+     * Copy content-length header only
+     */
+    protected void copyContentLength(HttpResponse proxyResponse, HttpServletResponse servletResponse) {
+        for (Header header : proxyResponse.getAllHeaders()) {
+            if (header.getName().equalsIgnoreCase(HttpHeaders.CONTENT_LENGTH)) {
+                servletResponse.addHeader(header.getName(), header.getValue());
+                return;
             }
         }
     }
@@ -518,6 +534,7 @@ public class ProxyServlet extends HttpServlet {
         HttpEntity entity = proxyResponse.getEntity();
         if (entity != null) {
             if (!this.doEnableRewrite || servletRequest == null) {
+                copyContentLength(proxyResponse, servletResponse);
                 OutputStream servletOutputStream = servletResponse.getOutputStream();
                 entity.writeTo(servletOutputStream);
             } else {
@@ -552,6 +569,7 @@ public class ProxyServlet extends HttpServlet {
                     // make sure to reset content length after the rewrite
                     servletResponse.setContentLength(doc.toString().length());
                 } else {
+                    copyContentLength(proxyResponse, servletResponse);
                     OutputStream servletOutputStream = servletResponse.getOutputStream();
                     new ByteArrayEntity(content).writeTo(servletOutputStream);
                 }
