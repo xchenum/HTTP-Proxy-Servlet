@@ -475,21 +475,28 @@ public class ProxyServlet extends HttpServlet {
                 entity.writeTo(servletOutputStream);
             } else {
                 String responseString = EntityUtils.toString(entity, "UTF-8");
-                Document doc = Jsoup.parse(responseString);
-                for (Element link : doc.select("a")) {
-                    String linkHref = link.attr("href");
-                    link.attr("href", rewriteUrl(linkHref, servletRequest));
+                if (responseString.contains("<html>")) {
+                    // a quick hack to make sure we only rewrite html pages
+                    // and skip css, etc.
+                    Document doc = Jsoup.parse(responseString);
+                    for (Element link : doc.select("a")) {
+                        String linkHref = link.attr("href");
+                        link.attr("href", rewriteUrl(linkHref, servletRequest));
+                    }
+
+                    for (Element link : doc.select("link")) {
+                        String linkHref = link.attr("href");
+                        link.attr("href", rewriteUrl(linkHref, servletRequest));
+                    }
+
+                    OutputStream servletOutputStream = servletResponse.getOutputStream();
+
+                    HttpEntity res = new StringEntity(doc.toString(), ContentType.TEXT_HTML);
+                    res.writeTo(servletOutputStream);
+                } else {
+                    OutputStream servletOutputStream = servletResponse.getOutputStream();
+                    entity.writeTo(servletOutputStream);
                 }
-
-                for (Element link: doc.select("link")) {
-                    String linkHref = link.attr("href");
-                    link.attr("href", rewriteUrl(linkHref, servletRequest));
-                }
-
-                OutputStream servletOutputStream = servletResponse.getOutputStream();
-
-                HttpEntity res = new StringEntity(doc.toString(), ContentType.TEXT_HTML);
-                res.writeTo(servletOutputStream);
             }
         }
     }

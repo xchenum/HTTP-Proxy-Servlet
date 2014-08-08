@@ -173,9 +173,9 @@ public class ProxyServletRewriteTest {
             if (request instanceof HttpEntityEnclosingRequest) {
                 HttpEntityEnclosingRequest enclosingRequest = (HttpEntityEnclosingRequest) request;
                 HttpEntity entity = enclosingRequest.getEntity();
-                response.setEntity(new StringEntity(EntityUtils.toString(entity), ContentType.TEXT_HTML));
+                response.setEntity(new StringEntity("<html>" + EntityUtils.toString(entity), ContentType.TEXT_HTML));
             } else {
-                response.setEntity(new StringEntity("request body empty", ContentType.TEXT_HTML));
+                response.setEntity(new StringEntity("<html>request body empty", ContentType.TEXT_HTML));
             }
         }
     }
