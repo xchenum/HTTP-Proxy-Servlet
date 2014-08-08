@@ -461,6 +461,23 @@ public class ProxyServlet extends HttpServlet {
     }
 
     /**
+     * Rewrite href attribute of an element
+     */
+    protected void rewriteHref(Element element, HttpServletRequest servletRequest) {
+        String linkHref = element.attr("href");
+        if (linkHref == null)
+            return;
+
+        String newLinkHref = rewriteUrl(linkHref, servletRequest);
+        if (!linkHref.equals(newLinkHref)) {
+            element.attr("href", newLinkHref);
+            if (doLog) {
+                log("found link " + linkHref + ", rewrite to " + newLinkHref);
+            }
+        }
+    }
+
+    /**
      * Copy response body data (the entity) from the proxy to the servlet client.
      */
     protected void copyResponseEntity(
@@ -479,14 +496,13 @@ public class ProxyServlet extends HttpServlet {
                     // a quick hack to make sure we only rewrite html pages
                     // and skip css, etc.
                     Document doc = Jsoup.parse(responseString);
+
                     for (Element link : doc.select("a")) {
-                        String linkHref = link.attr("href");
-                        link.attr("href", rewriteUrl(linkHref, servletRequest));
+                        rewriteHref(link, servletRequest);
                     }
 
                     for (Element link : doc.select("link")) {
-                        String linkHref = link.attr("href");
-                        link.attr("href", rewriteUrl(linkHref, servletRequest));
+                        rewriteHref(link, servletRequest);
                     }
 
                     OutputStream servletOutputStream = servletResponse.getOutputStream();
